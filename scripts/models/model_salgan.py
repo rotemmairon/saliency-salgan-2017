@@ -20,33 +20,44 @@ class ModelSALGAN(Model):
         self.discriminator = discriminator.build(self.inputHeight, self.inputWidth,
                                                  T.concatenate([self.output_var, self.input_var], axis=1))
 
-        # Set prediction function
         output_layer_name = 'output'
 
+        # Generator output (train)
         prediction = lasagne.layers.get_output(self.net[output_layer_name])
+        
+        # Generator output (test, disable stochastic behaviour such as dropout)
         test_prediction = lasagne.layers.get_output(self.net[output_layer_name], deterministic=True)
+        
+        # The prediction function: [generator input] --> [test_prediction]
         self.predictFunction = theano.function([self.input_var], test_prediction)
 
+        
+        # Get the discriminator output for real input
         disc_lab = lasagne.layers.get_output(self.discriminator['prob'],
                                              T.concatenate([self.output_var, self.input_var], axis=1))
+        
+        # Get the discriminator output for fake input
         disc_gen = lasagne.layers.get_output(self.discriminator['prob'],
                                              T.concatenate([prediction, self.input_var], axis=1))
 
         # Downscale the saliency maps
         output_var_pooled = T.signal.pool.pool_2d(self.output_var, (4, 4), mode="average_exc_pad", ignore_border=True)
         prediction_pooled = T.signal.pool.pool_2d(prediction, (4, 4), mode="average_exc_pad", ignore_border=True)
+        
         train_err = lasagne.objectives.binary_crossentropy(prediction_pooled, output_var_pooled).mean()
-        + 1e-4 * lasagne.regularization.regularize_network_params(self.net[output_layer_name], lasagne.regularization.l2)
-
+                    + 1e-4 * lasagne.regularization.regularize_network_params(self.net[output_layer_name], 
+                                                                              lasagne.regularization.l2)
         # Define loss function and input data
         ones = T.ones(disc_lab.shape)
         zeros = T.zeros(disc_lab.shape)
         D_obj = lasagne.objectives.binary_crossentropy(T.concatenate([disc_lab, disc_gen], axis=0),
                                                        T.concatenate([ones, zeros], axis=0)).mean()
-        + 1e-4 * lasagne.regularization.regularize_network_params(self.discriminator['prob'], lasagne.regularization.l2)
+                + 1e-4 * lasagne.regularization.regularize_network_params(self.discriminator['prob'], 
+                                                                          lasagne.regularization.l2)
 
         G_obj_d = lasagne.objectives.binary_crossentropy(disc_gen, T.ones(disc_lab.shape)).mean()
-        + 1e-4 * lasagne.regularization.regularize_network_params(self.net[output_layer_name], lasagne.regularization.l2)
+                  + 1e-4 * lasagne.regularization.regularize_network_params(self.net[output_layer_name], 
+                                                                            lasagne.regularization.l2)
 
         G_obj = G_obj_d + train_err * alpha
         cost = [G_obj, D_obj, train_err]
