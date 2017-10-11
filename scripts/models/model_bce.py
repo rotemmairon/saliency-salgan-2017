@@ -12,14 +12,18 @@ class ModelBCE(Model):
     def __init__(self, w, h, batch_size=32, lr=0.001):
         super(ModelBCE, self).__init__(w, h, batch_size)
 
+        # Build Generator
         self.net = generator.build(self.inputHeight, self.inputWidth, self.input_var)
 
+        # Generator output (train)
         output_layer_name = 'output'
         prediction = lasagne.layers.get_output(self.net[output_layer_name])
 
+        # Generator output (test, disable stochastic behaviour such as dropout)
         test_prediction = lasagne.layers.get_output(self.net[output_layer_name], deterministic=True)
         self.predictFunction = theano.function([self.input_var], test_prediction)
 
+        # Downscale the saliency maps
         output_var_pooled = T.signal.pool.pool_2d(self.output_var, (4, 4), mode="average_exc_pad", ignore_border=True)
         prediction_pooled = T.signal.pool.pool_2d(prediction, (4, 4), mode="average_exc_pad", ignore_border=True)
 
